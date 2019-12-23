@@ -13,6 +13,7 @@ import (
 	"os/exec"
 	"strings"
 	"syscall"
+	"time"
 
 	"comail.io/go/colog"
 	"github.com/bgentry/speakeasy"
@@ -106,18 +107,6 @@ func runMain(cmd *cobra.Command, args []string) {
 		Auth: nil,
 	}
 
-	// Password auth or prompt callback
-	if flagSSHPassword != "" {
-		log.Println("trace: adding password auth")
-		config.Auth = append(config.Auth, ssh.Password(flagSSHPassword))
-	} else {
-		log.Println("trace: adding password callback auth")
-		config.Auth = append(config.Auth, ssh.PasswordCallback(func() (string, error) {
-			prompt := fmt.Sprintf("%s@%s's password: ", flagSSHUsername, sshHost)
-			return speakeasy.Ask(prompt)
-		}))
-	}
-
 	// Key auth
 	if flagSSHIdentityFile != "" {
 		auth, err := loadPrivateKey(flagSSHIdentityFile)
@@ -128,6 +117,18 @@ func runMain(cmd *cobra.Command, args []string) {
 
 		log.Println("trace: adding identity file auth")
 		config.Auth = append(config.Auth, auth)
+	} else {
+		// Password auth or prompt callback
+		if flagSSHPassword != "" {
+			log.Println("trace: adding password auth")
+			config.Auth = append(config.Auth, ssh.Password(flagSSHPassword))
+		} else {
+			log.Println("trace: adding password callback auth")
+			config.Auth = append(config.Auth, ssh.PasswordCallback(func() (string, error) {
+				prompt := fmt.Sprintf("%s@%s's password: ", flagSSHUsername, sshHost)
+				return speakeasy.Ask(prompt)
+			}))
+		}
 	}
 
 	// SSH agent auth
@@ -169,6 +170,15 @@ func runMain(cmd *cobra.Command, args []string) {
 
 	// Dial the SSH connection
 	log.Printf("debug: attempting %d authentication methods (%+v)", len(config.Auth), config.Auth)
+
+	for {
+		connect(sshHost, config)
+		log.Println("info: connect failed, will reconnect after 30 seconds")
+		time.Sleep(time.Second * 30)
+	}
+}
+
+func connect(sshHost string, config *ssh.ClientConfig) {
 	sshConn, err := ssh.Dial("tcp", sshHost, config)
 	if err != nil {
 		log.Fatalf("error: error dialing remote host: %s", err)
@@ -180,12 +190,16 @@ func runMain(cmd *cobra.Command, args []string) {
 	if err != nil {
 		log.Fatalf("error: error listening on remote host: %s", err)
 	}
+	defer l.Close()
 
 	// Start accepting shell connections
 	log.Printf("info: listening for connections on %s (remote listen address: %s)", sshHost, flagAddr)
 	for {
 		conn, err := l.Accept()
 		if err != nil {
+			if err == io.EOF {
+				return
+			}
 			log.Printf("error: error accepting connection: %s", err)
 			continue
 		}
