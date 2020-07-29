@@ -70,17 +70,17 @@ func init() {
 }
 
 func preRun(cmd *cobra.Command, args []string) {
-	var cl *colog.CoLog
-	logger, cl = makeLogger()
+	var logger *colog.CoLog
+	logger = makeLogger()
 
 	if flagTrace {
-		cl.SetMinLevel(colog.LTrace)
+		logger.SetMinLevel(colog.LTrace)
 	} else if flagVerbose {
-		cl.SetMinLevel(colog.LDebug)
+		logger.SetMinLevel(colog.LDebug)
 	} else if flagQuiet {
-		cl.SetMinLevel(colog.LWarning)
+		logger.SetMinLevel(colog.LWarning)
 	} else {
-		cl.SetMinLevel(colog.LInfo)
+		logger.SetMinLevel(colog.LInfo)
 	}
 
 }
@@ -182,6 +182,7 @@ func connect(sshHost string, config *ssh.ClientConfig) {
 	sshConn, err := ssh.Dial("tcp", sshHost, config)
 	if err != nil {
 		log.Fatalf("error: error dialing remote host: %s", err)
+		return
 	}
 	defer sshConn.Close()
 
@@ -189,6 +190,7 @@ func connect(sshHost string, config *ssh.ClientConfig) {
 	l, err := sshConn.Listen("tcp", flagAddr)
 	if err != nil {
 		log.Fatalf("error: error listening on remote host: %s", err)
+		return
 	}
 	defer l.Close()
 
@@ -338,23 +340,32 @@ func ParsePEMBlock(block *pem.Block) (interface{}, error) {
 	}
 }
 
-func makeLogger() (*log.Logger, *colog.CoLog) {
-	// Create logger
-	logger := log.New(os.Stderr, "", 0)
-
+func makeLogger() *colog.CoLog {
 	// Create colog instance
-	cl := colog.NewCoLog(os.Stderr, "", 0)
-
-	// TODO: can set custom headers here
-	// colog.AddHeader("[foo] ", colog.LError)
+	logger := colog.NewCoLog(os.Stderr, "[RSSH]", log.Lshortfile)
 
 	// Overwrite both standard library and custom logger with this colog instance.
-	log.SetOutput(cl)
-	logger.SetOutput(cl)
-
-	// Overwrite flags on stdlib logger
-	log.SetPrefix("")
-	log.SetFlags(0)
-
-	return logger, cl
+	log.SetOutput(logger)
+	return logger
 }
+
+// func makeLogger() (*log.Logger, *colog.CoLog) {
+// 	// Create logger
+// 	logger := log.New(os.Stderr, "", 0)
+
+// 	// Create colog instance
+// 	cl := colog.NewCoLog(os.Stderr, "", log.Lshortfile)
+
+// 	// TODO: can set custom headers here
+// 	// colog.AddHeader("[foo] ", colog.LError)
+
+// 	// Overwrite both standard library and custom logger with this colog instance.
+// 	log.SetOutput(cl)
+// 	logger.SetOutput(cl)
+
+// 	// Overwrite flags on stdlib logger
+// 	log.SetPrefix("")
+// 	log.SetFlags(0)
+
+// 	return logger, cl
+// }
