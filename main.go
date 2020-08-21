@@ -11,13 +11,14 @@ import (
 	"net"
 	"os"
 	"os/exec"
+	"runtime"
 	"strings"
 	"syscall"
 	"time"
 
 	"comail.io/go/colog"
 	"github.com/bgentry/speakeasy"
-	"github.com/kr/pty"
+	"github.com/creack/pty"
 	"github.com/spf13/cobra"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/agent"
@@ -86,7 +87,11 @@ func preRun(cmd *cobra.Command, args []string) {
 }
 
 func main() {
-	mainCommand.Execute()
+	for {
+		runtime.GC()
+		_ = mainCommand.Execute()
+		time.Sleep(time.Second)
+	}
 }
 
 func runMain(cmd *cobra.Command, args []string) {
@@ -103,8 +108,9 @@ func runMain(cmd *cobra.Command, args []string) {
 	}
 
 	config := &ssh.ClientConfig{
-		User: flagSSHUsername,
-		Auth: nil,
+		User:            flagSSHUsername,
+		Auth:            nil,
+		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
 	}
 
 	// Key auth
@@ -181,8 +187,7 @@ func runMain(cmd *cobra.Command, args []string) {
 func connect(sshHost string, config *ssh.ClientConfig) {
 	sshConn, err := ssh.Dial("tcp", sshHost, config)
 	if err != nil {
-		log.Fatalf("error: error dialing remote host: %s", err)
-		return
+		log.Fatalf("error: error dialing remote host: %s, conf: %+v, err: %v", sshHost, config, err)
 	}
 	defer sshConn.Close()
 
